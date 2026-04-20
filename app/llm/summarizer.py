@@ -34,13 +34,29 @@ def build_summary_input(item: Item) -> dict[str, str]:
     }
 
 
+def _extract_fallback_tags(item: Item) -> list[str]:
+    """title/body から簡易的に技術キーワードを抽出する"""
+    _KNOWN = [
+        "python", "javascript", "typescript", "rust", "go", "java",
+        "react", "vue", "next.js", "aws", "gcp", "azure", "docker", "kubernetes",
+        "llm", "gpt", "claude", "gemini", "ai", "ml", "deep learning",
+        "api", "rest", "graphql", "sql", "database", "redis",
+        "terraform", "ci/cd", "github", "git",
+    ]
+    text = f"{item.title} {item.body[:300]}".lower()
+    return [t for t in _KNOWN if t in text][:5]
+
+
 def _fallback(item: Item) -> dict[str, Any]:
     """LLM 失敗時の最低限の結果"""
+    body_head = item.body[:80].replace("\n", " ").strip()
+    summary = f"{item.title[:80]}。{body_head}" if body_head else item.title[:120]
+    logger.info("fallback で保存: source_item_id=%s", item.source_item_id)
     return {
-        "summary": item.title[:120],
-        "tags": [],
+        "summary": summary[:120],
+        "tags": _extract_fallback_tags(item),
         "novelty_score": 0.0,
-        "buzz_reason": "",
+        "buzz_reason": "(LLM未使用)",
     }
 
 

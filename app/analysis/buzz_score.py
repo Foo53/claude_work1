@@ -5,7 +5,10 @@ enriched item に対して単純なスコアを付与する。
 
 スコア式::
 
-    buzz_score = engagement_score + novelty_score * NOVELTY_WEIGHT
+    buzz_score = engagement_score
+               + novelty_score * NOVELTY_WEIGHT
+               + len(tags) * TAG_WEIGHT
+               - FALLBACK_PENALTY  (fallback データの場合)
 """
 
 from typing import Any
@@ -13,11 +16,19 @@ from typing import Any
 from app.storage.models import EnrichedItemRow
 
 NOVELTY_WEIGHT = 10.0
+TAG_WEIGHT = 0.5
+FALLBACK_PENALTY = 5.0
 
 
 def calc_buzz_score(enriched: EnrichedItemRow, engagement_score: float = 0.0) -> float:
     """単一 item の buzz score を計算"""
-    return engagement_score + enriched.novelty_score * NOVELTY_WEIGHT
+    from app.analysis.trend_detector import is_fallback
+
+    score = engagement_score + enriched.novelty_score * NOVELTY_WEIGHT
+    score += len(enriched.get_tags()) * TAG_WEIGHT
+    if is_fallback(enriched):
+        score -= FALLBACK_PENALTY
+    return score
 
 
 def rank_by_buzz(

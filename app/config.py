@@ -23,18 +23,18 @@ class Settings:
 
 def _load_settings() -> Settings:
     load_dotenv()
-    provider = os.getenv("LLM_PROVIDER", "zhipu")
+    provider = os.getenv("LLM_PROVIDER", "zhipu").strip()
     defaults = _provider_defaults(provider)
     return Settings(
-        reddit_client_id=os.getenv("REDDIT_CLIENT_ID", ""),
-        reddit_client_secret=os.getenv("REDDIT_CLIENT_SECRET", ""),
+        reddit_client_id=os.getenv("REDDIT_CLIENT_ID", "").strip(),
+        reddit_client_secret=os.getenv("REDDIT_CLIENT_SECRET", "").strip(),
         reddit_user_agent=os.getenv("REDDIT_USER_AGENT", "ai-trend-analyzer/0.1"),
-        qiita_access_token=os.getenv("QIITA_ACCESS_TOKEN", ""),
+        qiita_access_token=os.getenv("QIITA_ACCESS_TOKEN", "").strip(),
         db_path=os.getenv("DB_PATH", "data/trends.db"),
         llm_provider=provider,
-        llm_api_key=os.getenv("LLM_API_KEY", ""),
-        llm_base_url=os.getenv("LLM_BASE_URL", defaults["base_url"]),
-        llm_model=os.getenv("LLM_MODEL", defaults["model"]),
+        llm_api_key=os.getenv("LLM_API_KEY", "").strip(),
+        llm_base_url=os.getenv("LLM_BASE_URL", defaults["base_url"]).strip(),
+        llm_model=os.getenv("LLM_MODEL", defaults["model"]).strip(),
         llm_max_tokens=int(os.getenv("LLM_MAX_TOKENS", "2048")),
         llm_temperature=float(os.getenv("LLM_TEMPERATURE", "0.3")),
     )
@@ -54,6 +54,10 @@ def _provider_defaults(provider: str) -> dict[str, str]:
         "openai": {
             "base_url": "https://api.openai.com/v1",
             "model": "gpt-4o",
+        },
+        "gemini": {
+            "base_url": "https://generativelanguage.googleapis.com/v1beta",
+            "model": "gemini-3-flash-preview",
         },
     }
     return _defaults.get(provider, _defaults["zhipu"])

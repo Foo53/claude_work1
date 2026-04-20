@@ -28,26 +28,43 @@ def hello():
 
 @app.command()
 def collect(
-    source: str = typer.Option(..., help="収集元: reddit / qiita"),
+    source: str = typer.Option("all", help="収集元: qiita / reddit / all（デフォルト: all）"),
     subreddit: str = typer.Option("MachineLearning", help="subreddit名（reddit用）"),
     limit: int = typer.Option(20, help="取得件数（reddit用）"),
     page: int = typer.Option(1, help="ページ番号（qiita用）"),
     per_page: int = typer.Option(20, help="ページあたり件数（qiita用）"),
 ):
-    """投稿を収集してSQLiteに保存する"""
+    """投稿を収集してSQLiteに保存する。--source 未指定なら qiita + reddit を順に実行。"""
     setup_logging()
 
     # DB初期化
     from app.storage.db import init_db
     init_db()
 
-    if source == "reddit":
-        _collect_reddit(subreddit, limit)
-    elif source == "qiita":
-        _collect_qiita(page, per_page)
-    else:
-        typer.echo(f"エラー: 不明なsource '{source}'。reddit / qiita を指定してください。")
-        raise typer.Exit(code=1)
+    sources = ["qiita", "reddit"] if source == "all" else [source]
+    failed = []
+
+    for s in sources:
+        if s == "reddit":
+            try:
+                _collect_reddit(subreddit, limit)
+            except Exception as e:
+                typer.echo(f"Reddit 収集失敗: {e}")
+                logger.warning("Reddit 収集失敗", exc_info=True)
+                failed.append("reddit")
+        elif s == "qiita":
+            try:
+                _collect_qiita(page, per_page)
+            except Exception as e:
+                typer.echo(f"Qiita 収集失敗: {e}")
+                logger.warning("Qiita 収集失敗", exc_info=True)
+                failed.append("qiita")
+        else:
+            typer.echo(f"エラー: 不明なsource '{s}'。qiita / reddit / all を指定してください。")
+            raise typer.Exit(code=1)
+
+    if failed:
+        typer.echo(f"失敗: {', '.join(failed)}")
 
 
 def _clean_item(item: "Item") -> None:
@@ -63,9 +80,13 @@ def _collect_reddit(subreddit: str, limit: int) -> None:
     from app.normalizers.reddit_normalizer import normalize_reddit_posts
     from app.storage.repositories import ItemRepository
 
+    collector = RedditCollector()
+    config_err = collector.check_config()
+    if config_err:
+        raise RuntimeError(config_err)
+
     typer.echo(f"Reddit: r/{subreddit} から {limit}件取得中...")
 
-    collector = RedditCollector()
     raw_posts = collector.fetch_new_posts(subreddit, limit=limit)
     logger.info("Reddit 取得完了 subreddit=%s count=%d", subreddit, len(raw_posts))
 
@@ -192,6 +213,58 @@ def summarize(
     enrich_repo.close()
     status = " (dry-run)" if dry_run else ""
     typer.echo(f"完了{status}: 候補{len(candidates)}件 / 成功{saved}件 / エラー{errors}件")
+
+
+@app.command()
+def resummarize(
+    limit: int = typer.Option(20, help="再処理の最大件数"),
+    dry_run: bool = typer.Option(False, help="DB保存せず結果だけ表示"),
+):
+    """fallback で保存済みのアイテムを LLM で再要約する"""
+    setup_logging()
+
+    from app.storage.db import init_db
+    init_db()
+
+    from app.llm.classifier import classify_item
+    from app.llm.summarizer import summarize_item
+    from app.storage.repositories import EnrichedItemRepository
+
+    enrich_repo = EnrichedItemRepository()
+    pairs = enrich_repo.list_fallback_items(limit=limit)
+
+    typer.echo(f"再処理候補: {len(pairs)}件")
+
+    saved = 0
+    errors = 0
+    for enriched, item_row in pairs:
+        item = _row_to_item(item_row)
+        try:
+            summary_result = summarize_item(item)
+            category = classify_item(item.title, summary_result["summary"], summary_result["tags"])
+
+            if dry_run:
+                typer.echo(f"  [{category}] {item.title[:40]} → {summary_result['summary'][:60]}")
+            else:
+                enrich_repo.save(
+                    item_id=enriched.item_id,
+                    short_summary=summary_result["summary"],
+                    category=category,
+                    tags=summary_result["tags"],
+                    novelty_score=summary_result["novelty_score"],
+                    buzz_reason=summary_result["buzz_reason"],
+                    llm_model=settings.llm_model,
+                    prompt_version="1.0",
+                )
+            saved += 1
+        except Exception:
+            logger.warning("再処理スキップ: item_id=%d", enriched.item_id, exc_info=True)
+            errors += 1
+
+    enrich_repo.close()
+    skipped = len(pairs) - saved - errors
+    status = " (dry-run)" if dry_run else ""
+    typer.echo(f"完了{status}: 候補{len(pairs)}件 / 成功{saved}件 / スキップ{skipped}件 / エラー{errors}件")
 
 
 @app.command()

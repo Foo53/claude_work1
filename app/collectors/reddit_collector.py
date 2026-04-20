@@ -42,6 +42,17 @@ class RedditCollector:
         self._client_secret = settings.reddit_client_secret
         self._token: str | None = None
 
+    def check_config(self) -> str | None:
+        """認証に必要な設定が揃っているか確認。不足ならメッセージを返す"""
+        missing = []
+        if not self._client_id:
+            missing.append("REDDIT_CLIENT_ID")
+        if not self._client_secret:
+            missing.append("REDDIT_CLIENT_SECRET")
+        if missing:
+            return f"Reddit 認証未設定: {', '.join(missing)} を .env に設定してください"
+        return None
+
     def _ensure_token(self, client: httpx.Client) -> str:
         """アプリケーション_only_ 認証でアクセストークンを取得"""
         if self._token:

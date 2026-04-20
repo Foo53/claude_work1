@@ -36,6 +36,12 @@ def render_markdown_report(stats: dict[str, Any]) -> str:
     lines.append(f"- 対象期間: 直近 {hours} 時間")
     lines.append(f"- 対象件数: {total} 件")
 
+    # 品質内訳
+    llm_count = stats.get("llm_count", 0)
+    fallback_count = stats.get("fallback_count", 0)
+    fallback_rate = f"{fallback_count / total * 100:.0f}%" if total > 0 else "0%"
+    lines.append(f"- LLM要約: {llm_count} 件 / fallback: {fallback_count} 件 ({fallback_rate})")
+
     source_counts = stats.get("source_counts", {})
     if source_counts:
         src_parts = [f"{s} ({c})" for s, c in source_counts.items()]
@@ -71,7 +77,9 @@ def render_markdown_report(stats: dict[str, Any]) -> str:
         for i, h in enumerate(highlighted, 1):
             tags = ", ".join(h.get("tags", [])) or "-"
             buzz = h.get("buzz_score", 0.0)
-            lines.append(f"### {i}. [{h.get('category', '?')}] buzz={buzz:.1f}")
+            is_fallback = h.get("buzz_reason", "") == "(LLM未使用)"
+            mark = "[fallback]" if is_fallback else "[LLM]"
+            lines.append(f"### {i}. [{h.get('category', '?')}] {mark} buzz={buzz:.1f}")
             lines.append("")
             lines.append(f"> {h.get('short_summary', '')}")
             lines.append("")

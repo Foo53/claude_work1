@@ -22,16 +22,16 @@ logger = logging.getLogger(__name__)
 
 # カテゴリ → キーワードのルール辞書（後で調整しやすい）
 _RULES: dict[str, list[str]] = {
-    "coding_agent": ["coding agent", "コーディングエージェント", "devin", "swe-agent", "autonomous agent"],
-    "mcp_tool_use": ["mcp", "tool use", "function calling", "ツール使用"],
-    "rag": ["rag", "retrieval", "検索拡張", "vector search", "embedding"],
-    "eval_benchmark": ["benchmark", "eval", "評価", "leaderboard", "mt-bench"],
-    "local_llm": ["local llm", "llama", "ollama", "on-device", "gguf", "量化"],
+    "coding_agent": ["coding agent", "コーディングエージェント", "devin", "swe-agent", "autonomous agent", "aiエージェント"],
+    "mcp_tool_use": ["mcp", "tool use", "function calling", "ツール使用", "function calling"],
+    "rag": ["rag", "retrieval", "検索拡張", "vector search", "embedding", "ベクトル検索"],
+    "eval_benchmark": ["benchmark", "eval", "評価", "leaderboard", "mt-bench", "ベンチマーク"],
+    "local_llm": ["local llm", "llama", "ollama", "on-device", "gguf", "量化", "ローカルllm"],
     "oss_cli": ["cli", "ターミナル", "コマンドライン", "oss", "オープンソースツール"],
-    "voice_realtime": ["voice", "音声", "realtime", "speech", "tts", "whisper"],
-    "ai_ide_devex": ["ide", "開発体験", "devex", "copilot", "補完", "lsp", "エディタ"],
+    "voice_realtime": ["voice", "音声", "realtime", "speech", "tts", "whisper", "stt"],
+    "ai_ide_devex": ["ide", "開発体験", "devex", "copilot", "補完", "lsp", "エディタ", "vscode", "cursor"],
     "prompt_engineering": ["prompt", "プロンプト", "chain-of-thought", "few-shot", "cot"],
-    "ai_infra_serving": ["serving", "推論", "inference", "deploy", "vllm", "triton", "サービング"],
+    "ai_infra_serving": ["serving", "推論", "inference", "deploy", "vllm", "triton", "サービング", "インフラ"],
 }
 
 

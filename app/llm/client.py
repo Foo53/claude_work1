@@ -114,10 +114,43 @@ def _call_openai(prompt: str, system: str) -> str:
     return resp.json()["choices"][0]["message"]["content"]
 
 
+def _call_gemini(prompt: str, system: str, json_mode: bool = False) -> str:
+    """Google Gemini (generateContent REST API)"""
+    contents: list[dict[str, Any]] = []
+    if system:
+        contents.append({"role": "user", "parts": [{"text": system}]})
+        contents.append({"role": "model", "parts": [{"text": "了解しました。"}]})
+    contents.append({"role": "user", "parts": [{"text": prompt}]})
+
+    gen_config: dict[str, Any] = {
+        "maxOutputTokens": settings.llm_max_tokens,
+        "temperature": settings.llm_temperature,
+    }
+    if json_mode:
+        gen_config["responseMimeType"] = "application/json"
+
+    resp = httpx.post(
+        f"{settings.llm_base_url}/models/{settings.llm_model}:generateContent",
+        params={"key": settings.llm_api_key},
+        json={
+            "contents": contents,
+            "generationConfig": gen_config,
+        },
+        timeout=60.0,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    try:
+        return data["candidates"][0]["content"]["parts"][0]["text"]
+    except (KeyError, IndexError):
+        raise LLMError(f"Gemini レスポンス形式エラー: {json.dumps(data, ensure_ascii=False)[:300]}")
+
+
 _PROVIDERS: dict[str, callable] = {
     "zhipu": _call_zhipu,
     "anthropic": _call_anthropic,
     "openai": _call_openai,
+    "gemini": _call_gemini,
 }
 
 
@@ -144,7 +177,18 @@ def generate_text(prompt: str, system: str = "") -> str:
 
 def generate_json(prompt: str, system: str = "") -> dict[str, Any]:
     """プロンプトを送信して JSON 応答を得る"""
-    raw = generate_text(prompt, system=system)
+    # Gemini は JSON mode を使って直接 JSON を生成
+    if settings.llm_provider == "gemini" and settings.llm_api_key:
+        try:
+            raw = _call_gemini(prompt, system, json_mode=True)
+        except httpx.HTTPStatusError as e:
+            raise LLMError(
+                f"Gemini API エラー ({e.response.status_code}): {e.response.text[:200]}"
+            ) from e
+        except Exception as e:
+            raise LLMError(f"Gemini 呼び出し失敗: {e}") from e
+    else:
+        raw = generate_text(prompt, system=system)
     try:
         text = raw.strip()
         if text.startswith("```"):

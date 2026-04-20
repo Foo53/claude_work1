@@ -142,6 +142,20 @@ class EnrichedItemRepository:
             .order_by(EnrichedItemRow.created_at.desc())
         ).scalars().all())
 
+    def list_fallback_items(self, limit: int = 100) -> list[tuple[EnrichedItemRow, ItemRow]]:
+        """fallback 判定の enriched_items と対応する ItemRow を取得"""
+        from app.analysis.trend_detector import is_fallback
+        enriched_list = self._session.execute(
+            select(EnrichedItemRow)
+            .order_by(EnrichedItemRow.created_at.desc())
+            .limit(limit)
+        ).scalars().all()
+        fallback = [e for e in enriched_list if is_fallback(e)]
+        if not fallback:
+            return []
+        item_map = self.get_items_by_ids([e.item_id for e in fallback])
+        return [(e, item_map[e.item_id]) for e in fallback if e.item_id in item_map]
+
     def get_items_by_ids(self, item_ids: list[int]) -> dict[int, ItemRow]:
         """item_id → ItemRow のマップ"""
         rows = self._session.execute(
