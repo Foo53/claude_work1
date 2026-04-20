@@ -1,10 +1,12 @@
-"""items テーブルのリポジトリ"""
+"""items / enriched_items のリポジトリ"""
 
-from sqlalchemy import select
+from datetime import datetime, timezone
+
+from sqlalchemy import select, not_, exists, func
 
 from app.models import Item
 from app.storage.db import get_session
-from app.storage.models import ItemRow
+from app.storage.models import EnrichedItemRow, ItemRow
 
 
 class ItemRepository:
@@ -51,6 +53,9 @@ class ItemRepository:
         ).scalars().all()
         return list(rows)
 
+    def get_by_id(self, item_id: int) -> ItemRow | None:
+        return self._session.get(ItemRow, item_id)
+
     def close(self) -> None:
         self._session.close()
 
@@ -71,3 +76,78 @@ class ItemRepository:
         if item.raw_json:
             row.set_raw_json(item.raw_json)
         return row
+
+
+class EnrichedItemRepository:
+    """EnrichedItem の永続化を担当する"""
+
+    def __init__(self) -> None:
+        self._session = get_session()
+
+    def save(self, item_id: int, short_summary: str, category: str,
+             tags: list[str], novelty_score: float, buzz_reason: str,
+             llm_model: str = "", prompt_version: str = "") -> EnrichedItemRow:
+        """upsert で保存（同じ item_id なら上書き）"""
+        existing = self._session.execute(
+            select(EnrichedItemRow).where(EnrichedItemRow.item_id == item_id)
+        ).scalar_one_or_none()
+
+        if existing:
+            existing.short_summary = short_summary
+            existing.category = category
+            existing.set_tags(tags)
+            existing.novelty_score = novelty_score
+            existing.buzz_reason = buzz_reason
+            existing.llm_model = llm_model
+            existing.prompt_version = prompt_version
+            self._session.commit()
+            return existing
+
+        row = EnrichedItemRow(
+            item_id=item_id,
+            short_summary=short_summary,
+            category=category,
+            novelty_score=novelty_score,
+            buzz_reason=buzz_reason,
+            llm_model=llm_model,
+            prompt_version=prompt_version,
+        )
+        row.set_tags(tags)
+        self._session.add(row)
+        self._session.commit()
+        return row
+
+    def is_enriched(self, item_id: int) -> bool:
+        """指定 item_id が既に enrich 済みか"""
+        return self._session.query(
+            exists().where(EnrichedItemRow.item_id == item_id)
+        ).scalar()
+
+    def list_pending_items(self, limit: int = 50) -> list[ItemRow]:
+        """まだ enrich されていない Item を取得"""
+        enriched_ids = select(EnrichedItemRow.item_id)
+        rows = self._session.execute(
+            select(ItemRow)
+            .where(not_(ItemRow.id.in_(enriched_ids)))
+            .order_by(ItemRow.collected_at.desc())
+            .limit(limit)
+        ).scalars().all()
+        return list(rows)
+
+    def list_enriched_since(self, since: datetime) -> list[EnrichedItemRow]:
+        """指定日時以降に作成された enriched_items を取得"""
+        return list(self._session.execute(
+            select(EnrichedItemRow)
+            .where(EnrichedItemRow.created_at >= since)
+            .order_by(EnrichedItemRow.created_at.desc())
+        ).scalars().all())
+
+    def get_items_by_ids(self, item_ids: list[int]) -> dict[int, ItemRow]:
+        """item_id → ItemRow のマップ"""
+        rows = self._session.execute(
+            select(ItemRow).where(ItemRow.id.in_(item_ids))
+        ).scalars().all()
+        return {r.id: r for r in rows}
+
+    def close(self) -> None:
+        self._session.close()

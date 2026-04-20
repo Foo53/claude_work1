@@ -1,9 +1,9 @@
-"""items テーブルの ORM モデル"""
+"""テーブル ORM モデル"""
 
 import json
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, Float, Index, String, Text
+from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -38,3 +38,26 @@ class ItemRow(Base):
 
     def get_raw_json(self) -> dict:
         return json.loads(self.raw_json) if self.raw_json else {}
+
+
+class EnrichedItemRow(Base):
+    __tablename__ = "enriched_items"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    item_id: Mapped[int] = mapped_column(Integer, ForeignKey("items.id"), nullable=False, unique=True)
+    short_summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    category: Mapped[str] = mapped_column(String(50), nullable=False, default="other")
+    tags_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    novelty_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    buzz_reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    llm_model: Mapped[str] = mapped_column(String(100), nullable=False, default="")
+    prompt_version: Mapped[str] = mapped_column(String(20), nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(timezone.utc)
+    )
+
+    def set_tags(self, tags: list[str]) -> None:
+        self.tags_json = json.dumps(tags, ensure_ascii=False)
+
+    def get_tags(self) -> list[str]:
+        return json.loads(self.tags_json) if self.tags_json else []
